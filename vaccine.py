@@ -1,4 +1,6 @@
 # coding: utf-8
+
+# Defining population sizes
 import matplotlib.pyplot as plt
 import numpy as np
 Ntotal = 9212000.0
@@ -7,13 +9,13 @@ high_risk = 2*10**6
 other = Ntotal - children - high_risk
 
 N = np.array([other,children,high_risk]) # The populations
-groups = len(N)
-vaccine_gap = 28
-v1 = np.array([[0.0 for i in range(vaccine_gap)] for j in N])
-v2 = np.array([0.0 for i in N])
+groups = len(N) # number of different groups
+vaccine_gap = 28 # time until second dose of vaccine (in days)
+v1 = np.array([[0.0 for i in range(vaccine_gap)] for j in N]) # the V1 compartment matrix
+v2 = np.array([0.0 for i in N]) # the V2 compartment vector
 y = np.array([8000.0, 16000.0,5000.0]) # number of Infected.
 z = np.array([120000.0,220000.0,20000.0]) # number of Recovered
-vaccine_profile = np.array([0.5,0.5,0.0])
+vaccine_profile = np.array([0.5,0.5,0.0]) # The priority of which group to vaccinate (Note that 0 means the group will never be vaccinated, even if there are leftover vaccines)
 assert(np.sum(vaccine_profile) == 1)
 x = N - y - z # number of Susceptibles
 
@@ -43,8 +45,8 @@ betas = np.array([
     [0.1,0.05,0.05],
     [0.15,0.2,0.025],
     [0.05,0.025,0.025]
-])/np.sum(Ntotal)
-base_betas = np.copy(betas)
+])/np.sum(Ntotal) # S -> I transmission matrix, betas at i,j = transmission from group j to group i
+base_betas = np.copy(betas) # to be used when not in lockdown
 vaccine_infected = np.array([0 for i in N])
 lockdown_beta = betas * 0.25 # lockdown_beta is the transmission rate when there is a lockdown
 transition_time = 7 # the number of days it takes base_beta to drop to lockdown_beta
@@ -105,31 +107,15 @@ while t < days: # the main loop
         for j in range(groups):
             infected += v1[i] * bet[j] * (1-vaccine_efficency_1)
 
-    # for i in range(len(v1)):
-    #     cop = np.copy(v1[i])
-    #     cop.shape = (vaccine_gap,1)
-    #     # infected = betas.dot(x.reshape(groups, 1).dot(y.reshape(1, groups)))
-    #     infected = np.sum((betas[i]*cop*y).T,axis=0)*(1-vaccine_efficency_1)
         v1[i] -= infected * dt
         daily_infected += np.sum(infected*dt, dtype=float)
-        # if cnt % 100 == 0:
-        #     print(t)
-        #     print(np.sum(v1))
-        vaccine_infected[i] = np.sum(infected,dtype=float)
-    # if cnt > 10:
-    #     exit(0)
-    # dV / dt = number of people vaccinated - number of vaccinated that are infected
-    # dS / dt = - number of susceptibles that got infected - number of susceptibles that got vaccinated
 
-    # dSdt = -(np.sum(betas*x*y,axis=1))
+        vaccine_infected[i] = np.sum(infected,dtype=float)
 
     dSdt = np.sum( -betas*(x.reshape(groups, 1).dot(y.reshape(1, groups))),axis=1)
     daily_infected -= np.sum(dSdt*dt)
     dSdt -= planned_vaccinations_1
-    # dR / dt = number of recovered
     dRdt = (gamma * y)
-
-    # dD / dt = number of deceased
     dDdt = y*lethality
 
     # sum up the total number of dead, to test validity of vaccine strategies in the future
