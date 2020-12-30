@@ -17,6 +17,8 @@ y = np.array([8000.0, 16000.0,5000.0]) # number of Infected.
 z = np.array([120000.0,220000.0,20000.0]) # number of Recovered
 vaccine_profile = np.array([0.5,0.5,0.0]) # The priority of which group to vaccinate (Note that 0 means the group will never be vaccinated, even if there are leftover vaccines)
 assert(np.sum(vaccine_profile) == 1)
+second_vaccine_priority = 0.5
+assert(1 >= second_vaccine_priority >= 0)
 x = N - y - z # number of Susceptibles
 
 d = np.array([0.0,0.0,0.0]) # number of Deceased
@@ -26,6 +28,7 @@ vaccines_per_day = 50000 # Limit of daily vaccines
 
 vaccine_efficency_1 = 0.5 # efficiency of the forst vaccine from 0 to 1
 vaccine_efficency_2 = 0.9 # efficiency of the second vaccine from 0 to 1
+immunity_loss_rate = 1/(30*7)
 yearly_birth_rate = 20/10000 # rate of birth in israel per year
 yearly_death_rate = 5/10000 # rate of death in israel per year
 daily_birth_rate = yearly_birth_rate / 365 # rate of birth in israel per day
@@ -43,8 +46,8 @@ zaxis = []
 seger_plot_color_change = [0] # this vector stores days when a lockdown starts or ends. it is used only to paint the graph in grey when there is a lockdown
 betas = np.array([
     [0.1,0.05,0.05],
-    [0.15,0.2,0.025],
-    [0.05,0.025,0.025]
+    [0.15,0.2,0.05],
+    [0.05,0.05,0.05]
 ])/np.sum(Ntotal) # S -> I transmission matrix, betas at i,j = transmission from group j to group i
 base_betas = np.copy(betas) # to be used when not in lockdown
 vaccine_infected = np.array([0 for i in N])
@@ -63,7 +66,7 @@ days = 365 # how many days to run the simulation
 
 vaccines_remaining = 5 * 10 ** 6 # Number of vaccines available
 while t < days: # the main loop
-    if cnt % 100 == 0: # If one day has passed, add the data to the graph
+    if cnt % 100 == 0: # If 1/10th day has passed, add the data to the graph
         taxis.append(t)
         xaxis.append(np.sum(x))
         yaxis.append(np.sum(y))
@@ -72,24 +75,24 @@ while t < days: # the main loop
         v2axis.append(np.sum(v2))
         daxis.append(np.sum(d))
 
-    v2_infected = betas*(v2.reshape(groups, 1).dot(y.reshape(1, groups)))*(1-vaccine_efficency_2)
+    v2_infected = betas*(v2.reshape(groups, 1).dot(y.reshape(1, groups)))*(1-vaccine_efficency_2) # How many people from V2 got infected
     daily_infected += np.sum(v2_infected) * dt
     # The number of people vaccinated in t time.
     # It equals min(vaccines_per_day, vaccines_remaining) unless floor(t) is a multiple of 7 (meaning shabbat, then it equals 0)
     vaccinations = min(vaccines_per_day, vaccines_remaining) if int(t+1) % 7 != 0 else 0
     vaccines_remaining -= vaccinations * dt
     ready_for_second_vaccine = np.copy(v1[:,-1])
-    vaccinations_2 = min(np.sum(ready_for_second_vaccine), vaccinations/1.5)
+    vaccinations_2 = min(np.sum(ready_for_second_vaccine), vaccinations*second_vaccine_priority) # how many people to give second dose of vaccine. it equals min(number of people who waited 28 days at least, or number of people we can vaccinate at the time)
     vaccinations_1 = vaccinations - vaccinations_2
-    if vaccinations_2 > 0:
-        profile = ready_for_second_vaccine * (vaccinations_2 / np.sum(ready_for_second_vaccine))
+    if vaccinations_2 > 0: # If we are giving second dose of vaccine in this iteration:
+        profile = ready_for_second_vaccine * (vaccinations_2 / np.sum(ready_for_second_vaccine)) # profile = how we divide the available vaccines among people that are ready for the 2nd vaccine - it is simply a factor of how many people in each group are waiting for the second vaccine, i.e normalized to how many people in each group are waiting for a vaccine
         v2 += profile * dt
         v1[:,-1] = v1[:,-1] - profile * dt
 
 
-    planned_vaccinations_1 = vaccinations_1 * vaccine_profile
+    planned_vaccinations_1 = vaccinations_1 * vaccine_profile # Normalize vaccines going to each group according to our priority
     for i in range(groups):
-        if planned_vaccinations_1[i] > x[i]:
+        if planned_vaccinations_1[i] > x[i]: # If there are no more people to vaccinate in a certain group, give those vaccines to another group
             leftovers = vaccine_profile[i]
             vaccine_profile[i] = 0
             planned_vaccinations_1[i] = 0
@@ -115,7 +118,8 @@ while t < days: # the main loop
     dSdt = np.sum( -betas*(x.reshape(groups, 1).dot(y.reshape(1, groups))),axis=1)
     daily_infected -= np.sum(dSdt*dt)
     dSdt -= planned_vaccinations_1
-    dRdt = (gamma * y)
+    dSdt += z*immunity_loss_rate
+    dRdt = (gamma * y) - z*immunity_loss_rate
     dDdt = y*lethality
 
     # sum up the total number of dead, to test validity of vaccine strategies in the future
@@ -127,12 +131,16 @@ while t < days: # the main loop
     y = N - z - x - np.sum(v1, axis=1) - v2 - d
     t = t + dt
     cnt += 1
-    # Government response (decide on lockdown)
+
     if cnt % (1 / dt) == 0: # if dt is a multiple of 1 / dt (meaning one day has passed)
+
+        # Shift V1 matrix one day (reset day 1, shift days 1 to 26 one spot to the right, and add day 27 to day 28+)
         new = np.zeros(v1.shape)
         new[:, 1:-1] = v1[:, :-2]
         new[:, -1] = np.sum(v1[:, -2:], axis=1)
         v1 = new
+
+        # Government response (decide on lockdown)
         if seger is True:
             if daily_infected > 500:
                 if steps_left > 0:  # beta is decreased unless it reached the minimum
