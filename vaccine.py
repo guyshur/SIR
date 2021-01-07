@@ -7,7 +7,7 @@ Ntotal = 9207817.0
 children = 4608434
 high_risk = 1093072
 other = Ntotal - children - high_risk
-
+days_in_lockdown = 0
 N = np.array([other,children,high_risk]) # The populations
 groups = len(N) # number of different groups
 vaccine_gap = 28 # time until second dose of vaccine (in days)
@@ -126,16 +126,6 @@ while t < days: # the main loop
         total_v1_this_iteration.append(allocated_vaccines)
     total_v1_this_iteration = np.array(total_v1_this_iteration)
     vaccines_remaining -= np.sum(total_v1_this_iteration)
-    # planned_vaccinations_1 = first_phase_vaccines * vaccine_profile # Normalize vaccines going to each group according to our priority
-    # for i in range(groups):
-    #     if planned_vaccinations_1[i] > x[i]: # If there are no more people to vaccinate in a certain group, give those vaccines to another group
-    #         leftovers = vaccine_profile[i]
-    #         vaccine_profile[i] = 0
-    #         planned_vaccinations_1[i] = 0
-    #         for j in range(groups):
-    #             if planned_vaccinations_1[j] > 0 and planned_vaccinations_1[j] + leftovers < x[i]:
-    #                 vaccine_profile[j] += leftovers
-    #                 break
 
 
     v1[:,0] += total_v1_this_iteration
@@ -169,7 +159,8 @@ while t < days: # the main loop
     cnt += 1
 
     if cnt % (1 / dt) == 0: # if dt is a multiple of 1 / dt (meaning one day has passed)
-
+        if seger:
+            days_in_lockdown += 1
         # Shift V1 matrix one day (reset day 1, shift days 1 to 26 one spot to the right, and add day 27 to day 28+)
         new = np.zeros(v1.shape)
         new[:, 1:-1] = v1[:, :-2]
@@ -219,5 +210,4 @@ plt.savefig('base_case_vaccines.png')
 plt.show()
 print("number of infected after {} days:".format(days), int(np.sum(y))) # number of infected at the end of the simulation
 print("number of dead from corona over {} days:".format(days), int(corona_deaths)) # number of dead (from corona) at the end of simulation
-print("number of vaccinated:",np.sum(v1), + np.sum(v2))
-print("number of vaccines not used",vaccines_remaining)
+print("days in lockdown:",days_in_lockdown)
