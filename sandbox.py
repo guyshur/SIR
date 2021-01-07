@@ -9,11 +9,11 @@ b = np.array([[0.1]])
 
 N = 300
 B = B/N
-while True:
-    dX = np.sum(-B * (X.reshape(2, 1).dot(Y.reshape(1, 2))), axis=1)
-    X += dX
-    Y -= dX
-    print(Y)
+# while True:
+#     dX = np.sum(-B * (X.reshape(2, 1).dot(Y.reshape(1, 2))), axis=1)
+#     X += dX
+#     Y -= dX
+#     print(Y)
   #  print(np.sum(-B * (X.reshape(2, 1).dot(Y.reshape(1, 2))), axis=1))
 # D = np.array([[2,2,2,3],[6,6,6,7]])
 # for i in range(len(D)):
@@ -33,4 +33,8 @@ while True:
 # V = V - profile
 # print(V)
 
-print(np.sum(-B*(X.reshape(2, 1).dot(Y.reshape(1, 2))),axis=1))
+#print(np.sum(-B*(X.reshape(2, 1).dot(Y.reshape(1, 2))),axis=1))
+v2=np.array([100.0,0])
+
+v2_infected = (B * (v2.reshape(2, 1).dot(Y.reshape(1, 2))))  # How many people from V2 got infected
+print(np.sum(v2_infected,axis=1))
