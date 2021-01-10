@@ -26,15 +26,21 @@ bbb = [
 data_based_beta = 0.03
 f2 = np.sqrt(4.7)
 f1 = np.sqrt(6)
-data_based = [
+old_data_based = [
     [data_based_beta*f2*f2,data_based_beta*f1*f2,data_based_beta*f2],
     [data_based_beta*f2*f1,data_based_beta*f1*f1,data_based_beta*f1],
     [data_based_beta*f2,data_based_beta*f1,data_based_beta]
 ]
+data_based = [
+  [0.0893000000000000,0.100896977159873,0.0411910184384897],
+   [0.100896977159873,0.114000000000000,0.0465403051128804],
+   [0.0411910184384897,0.0465403051128804,0.0190000000000000]
+] # S -> I transmission matrix, betas at i,j = transmission from group j to group i
+default_vaccine_profile = np.array([0.1,0.9,0.0])
 
-
-def simulate(vaccine_profile = None, beta = np.reshape([0.09]*9,(3,3)), vaccines = True):
-    vaccine_profile = np.array([.5,.5,0]) if vaccine_profile is None else np.array(vaccine_profile)
+def simulate(vaccine_profile = None, beta = None, second_vaccine_priority = 0.5, vaccines = True):
+    vaccine_profile = default_vaccine_profile if vaccine_profile is None else np.array(vaccine_profile)
+    beta = data_based if beta is None else beta
     Ntotal = 9207817.0
     children = 4608434
     high_risk = 1093072
@@ -47,8 +53,7 @@ def simulate(vaccine_profile = None, beta = np.reshape([0.09]*9,(3,3)), vaccines
     v2 = np.array([0.0 for i in N]) # the V2 compartment vector
     y = np.array([16941.0, 22266.0,5281.0]) # number of Infected.
     z = np.array([142250.0,186963.0,44346.0]) # number of Recovered
-    assert(np.sum(vaccine_profile) == 1)
-    second_vaccine_priority = 0.5
+    assert(0.9999 <= np.sum(vaccine_profile) <= 1.00001)
     assert(1 >= second_vaccine_priority >= 0)
     x = N - y - z # number of Susceptibles
 
@@ -60,10 +65,6 @@ def simulate(vaccine_profile = None, beta = np.reshape([0.09]*9,(3,3)), vaccines
     vaccine_efficency_1 = 0.52 # efficiency of the forst vaccine from 0 to 1
     vaccine_efficency_2 = 0.95 # efficiency of the second vaccine from 0 to 1
     immunity_loss_rate = 1/(30*6)
-    yearly_birth_rate = 20/10000 # rate of birth in israel per year
-    yearly_death_rate = 5/10000 # rate of death in israel per year
-    daily_birth_rate = yearly_birth_rate / 365 # rate of birth in israel per day
-    daily_death_rate = yearly_death_rate / 365 # rate of death in israel per day
     corona_deaths = 0 # number of people dead because of the virus during the simulation
     # vectors of data generated during the simulation
     taxis = []
@@ -78,8 +79,6 @@ def simulate(vaccine_profile = None, beta = np.reshape([0.09]*9,(3,3)), vaccines
 
 
     betas = np.array(beta)/np.sum(Ntotal) # S -> I transmission matrix, betas at i,j = transmission from group j to group i
-    base_betas = np.copy(betas) # to be used when not in lockdown
-    vaccine_infected = np.array([0 for i in N])
     lockdown_beta = betas * 0.25 # lockdown_beta is the transmission rate when there is a lockdown
     transition_time = 7 # the number of days it takes base_beta to drop to lockdown_beta
     steps_left = 7
@@ -193,8 +192,11 @@ def simulate(vaccine_profile = None, beta = np.reshape([0.09]*9,(3,3)), vaccines
                         betas += steps
 
             daily_infected = 0 # reset daily infected
-
-
+    vaccine_profile_str = (','.join([str(item) for item in vaccine_profile]))
+    v1_distribution = (','.join([str(round(item,3)) for item in list(np.sum(v1,axis=1)/N)]))
+    v2_distribution = (','.join([str(round(item,3)) for item in list(v2/N)]))
+    second_vaccine_priority = str(round(second_vaccine_priority,3))
+    output = ','.join([vaccine_profile_str,second_vaccine_priority,str(int(corona_deaths)),str(int(np.sum(y))),str(days_in_lockdown),v1_distribution,v2_distribution])
     # plot the data
     plt.title("SIR MODEL")
     plt.plot(taxis, xaxis, color=(0, 1, 0), linewidth=3.0, label='S')
@@ -212,11 +214,44 @@ def simulate(vaccine_profile = None, beta = np.reshape([0.09]*9,(3,3)), vaccines
     plt.legend()
     plt.xlabel('DAY')
     plt.grid(True)
-    plt.savefig('base_case_with_vaccines.png')
+    plt.savefig('last_result.png')
     plt.show()
-    print("number of infected after {} days:".format(days), int(np.sum(y))) # number of infected at the end of the simulation
-    print("number of dead from corona over {} days:".format(days), int(corona_deaths)) # number of dead (from corona) at the end of simulation
-    print("days in lockdown:",days_in_lockdown)
-    return(int(corona_deaths), np.sum(y), days_in_lockdown)
+    return int(corona_deaths), np.sum(y), days_in_lockdown, output
 
-simulate(vaccine_profile=[.5,.0,.5],beta=data_based, vaccines=True)
+
+def best_profile_search():
+    results = []
+    best_profile_for_lockdown = None
+    best_dose_priority_for_lockdown = 0
+    best_lockdown = np.inf
+    best_profile_for_deaths = None
+    best_dose_priority_for_deaths = 0
+    best_deaths = np.inf
+    for i in range(11):
+        for j in range(11):
+            for k in range(11):
+                    if i+j+k == 10:
+                        profile = [i*0.1,j*0.1,k*0.1]
+                        for l in range(7):
+                            deaths,infected,lockdown,output = simulate(vaccine_profile=profile, beta=data_based
+                                                                , vaccines=True,second_vaccine_priority=l*(1/6))
+                            print(profile.__str__()+':',deaths,infected,lockdown)
+                            results.append(output)
+                            if deaths < best_deaths:
+                                best_profile_for_deaths = profile
+                                best_dose_priority_for_deaths = l*(1/6)
+                                best_deaths = deaths
+                            if lockdown < best_lockdown:
+                                best_profile_for_lockdown = profile
+                                best_lockdown = lockdown
+                                best_dose_priority_for_lockdown = l*(1/6)
+    with open('parameter_search_full_result.csv','w+') as fp:
+        fp.write('priority_for_other,priority_for_children,priority_for_risk_group,priority_for_vaccine_2,deaths,infected_at_end,days_in_lockdown,v1_other/N(other),v1_children/N(children),v1_risk_group/N(risk_group),v2_other/N(other),v2_children/N(children),v2_risk_group/N(risk_group\n')
+        fp.write('\n'.join(results))
+    with open('parameter_search_best_result.txt','w+') as fp:
+        fp.write('best death prevention profile - ' + best_profile_for_deaths.__str__() + ' second_dose_priority - ' + str(best_dose_priority_for_deaths) + ' result - ' + str(best_deaths) +
+                 '\nbest lockdown prevention - ' + best_profile_for_lockdown.__str__() +  ' second_dose_priority - ' + str(best_dose_priority_for_lockdown) + ' result - ' +str(best_lockdown))
+
+
+if __name__ == '__main__':
+    print(simulate(vaccine_profile=default_vaccine_profile,beta=data_based,second_vaccine_priority=0,vaccines=True))
